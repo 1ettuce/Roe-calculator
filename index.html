@@ -1,1 +1,273 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>트레이딩 TP 수익 계산기</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --panel-bg: #1e1e24;
+            --text-color: #e0e0e0;
+            --accent-color: #00d26a;
+            --danger-color: #f6465d;
+            --border-color: #333;
+        }
 
+        body {
+            font-family: 'Pretendard', -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            background-color: var(--panel-bg);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            width: 100%;
+            max-width: 600px;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 24px;
+            margin-top: 0;
+            margin-bottom: 20px;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+            color: #aaa;
+        }
+
+        input[type="number"], select {
+            width: 100%;
+            padding: 12px;
+            background-color: #2b2b36;
+            border: 1px solid var(--border-color);
+            color: white;
+            border-radius: 6px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        .tp-section {
+            background-color: #25252e;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid var(--border-color);
+        }
+
+        .tp-header {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #fff;
+        }
+
+        .tp-flex {
+            display: flex;
+            gap: 10px;
+        }
+
+        .tp-flex > div {
+            flex: 1;
+        }
+
+        .result-box {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #1a1a20;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #333;
+        }
+
+        .result-item:last-child {
+            border-bottom: none;
+        }
+
+        .total-result {
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--accent-color);
+            text-align: right;
+            padding-top: 15px;
+        }
+
+        .positive { color: var(--accent-color); }
+        .negative { color: var(--danger-color); }
+        
+        .flex-row {
+            display: flex;
+            gap: 15px;
+        }
+        .flex-row > .input-group { flex: 1; }
+
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>📈 레버리지 & TP 수익 계산기</h1>
+
+    <div class="flex-row">
+        <div class="input-group">
+            <label>포지션</label>
+            <select id="positionType">
+                <option value="long">Long (롱/매수)</option>
+                <option value="short">Short (숏/매도)</option>
+            </select>
+        </div>
+        <div class="input-group">
+            <label>레버리지 (x)</label>
+            <input type="number" id="leverage" value="2" min="1">
+        </div>
+    </div>
+
+    <div class="input-group">
+        <label>진입가 (Entry Price)</label>
+        <input type="number" id="entryPrice" value="60000" min="0" step="0.01">
+    </div>
+
+    <hr style="border:0; border-top:1px solid #333; margin:20px 0;">
+
+    <div id="tp-container">
+        <!-- TP 1~4 생성 -->
+        <script>
+            for(let i=1; i<=4; i++) {
+                document.write(`
+                    <div class="tp-section" id="tp${i}-box">
+                        <div class="tp-header">🎯 TP ${i}</div>
+                        <div class="tp-flex">
+                            <div>
+                                <label>타겟 가격</label>
+                                <input type="number" id="tp${i}Price" class="tp-price" placeholder="가격 입력" step="0.01">
+                            </div>
+                            <div>
+                                <label>익절 비중 (%)</label>
+                                <input type="number" id="tp${i}Percent" class="tp-percent" placeholder="예: 25" min="0" max="100">
+                            </div>
+                        </div>
+                    </div>
+                `);
+            }
+        </script>
+    </div>
+
+    <div class="result-box">
+        <div style="font-weight: bold; margin-bottom: 10px;">📊 계산 결과</div>
+        <div id="result-content">값을 입력하면 결과가 나타납니다.</div>
+        <div class="total-result" id="total-result"></div>
+    </div>
+</div>
+
+<script>
+    const inputs = document.querySelectorAll('input, select');
+    
+    // 값이 변경될 때마다 자동 계산
+    inputs.forEach(input => {
+        input.addEventListener('input', calculate);
+    });
+
+    function calculate() {
+        const position = document.getElementById('positionType').value;
+        const leverage = parseFloat(document.getElementById('leverage').value) || 1;
+        const entry = parseFloat(document.getElementById('entryPrice').value);
+        
+        if (!entry || entry <= 0) return;
+
+        let resultHTML = '';
+        let totalContribution = 0;
+        let totalClosedPercent = 0;
+
+        for (let i = 1; i <= 4; i++) {
+            const tpPrice = parseFloat(document.getElementById(`tp${i}Price`).value);
+            const tpPercent = parseFloat(document.getElementById(`tp${i}Percent`).value) || 0;
+
+            const box = document.getElementById(`tp${i}-box`);
+            box.style.borderLeftColor = '#333'; // 초기화
+
+            if (tpPrice && tpPercent > 0) {
+                // 수익률(ROE) 계산 로직
+                let priceChangeRate = 0;
+                if (position === 'long') {
+                    priceChangeRate = (tpPrice - entry) / entry * 100;
+                } else {
+                    priceChangeRate = (entry - tpPrice) / entry * 100;
+                }
+
+                const roe = priceChangeRate * leverage;
+                const contribution = roe * (tpPercent / 100);
+                
+                totalContribution += contribution;
+                totalClosedPercent += tpPercent;
+
+                const colorClass = roe >= 0 ? 'positive' : 'negative';
+                const sign = roe >= 0 ? '+' : '';
+                
+                box.style.borderLeftColor = roe >= 0 ? 'var(--accent-color)' : 'var(--danger-color)';
+
+                resultHTML += `
+                    <div class="result-item">
+                        <span>TP ${i} (${tpPercent}% 익절)</span>
+                        <span>
+                            해당 구간 ROE: <strong class="${colorClass}">${sign}${roe.toFixed(2)}%</strong> 
+                            <span style="font-size:12px; color:#888;">(누적 기여: ${sign}${contribution.toFixed(2)}%)</span>
+                        </span>
+                    </div>
+                `;
+            }
+        }
+
+        const resultContent = document.getElementById('result-content');
+        const totalDiv = document.getElementById('total-result');
+
+        if (resultHTML === '') {
+            resultContent.innerHTML = '<span style="color:#888;">TP 가격과 익절 비중을 입력해주세요.</span>';
+            totalDiv.innerHTML = '';
+            return;
+        }
+
+        if (totalClosedPercent > 100) {
+            resultContent.innerHTML = `<span style="color:var(--danger-color);">⚠️ 익절 비중의 합이 100%를 초과했습니다. (${totalClosedPercent}%)</span>`;
+            totalDiv.innerHTML = '';
+            return;
+        }
+
+        resultContent.innerHTML = resultHTML;
+        
+        const totalSign = totalContribution >= 0 ? '+' : '';
+        totalDiv.innerHTML = `총 누적 확정 수익률: <span class="${totalContribution >= 0 ? 'positive' : 'negative'}">${totalSign}${totalContribution.toFixed(2)}%</span>`;
+    }
+
+    // 초기 예시값 세팅 (질문자의 예시)
+    document.getElementById('tp1Price').value = 66000;
+    document.getElementById('tp1Percent').value = 20;
+    calculate(); // 초기 계산 실행
+</script>
+
+</body>
+</html>
