@@ -3,11 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>트레이딩 TP 수익 계산기</title>
+    <title>트레이딩 시그널/수익 공유 생성기</title>
     <style>
         :root {
             --bg-color: #121212;
             --panel-bg: #1e1e24;
+            --section-bg: #25252e;
             --text-color: #e0e0e0;
             --accent-color: #00d26a;
             --danger-color: #f6465d;
@@ -26,39 +27,56 @@
 
         .container {
             background-color: var(--panel-bg);
-            padding: 30px;
+            padding: 25px;
             border-radius: 12px;
             box-shadow: 0 8px 24px rgba(0,0,0,0.5);
             width: 100%;
-            max-width: 600px;
+            max-width: 700px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
         }
 
         h1 {
             text-align: center;
-            font-size: 24px;
-            margin-top: 0;
-            margin-bottom: 20px;
+            font-size: 22px;
+            margin: 0;
+            color: #fff;
         }
 
-        .input-group {
-            margin-bottom: 15px;
+        .section {
+            background-color: var(--section-bg);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
         }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #aaa;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+        }
+
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 
         label {
             display: block;
-            margin-bottom: 5px;
-            font-size: 14px;
-            color: #aaa;
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 4px;
         }
 
-        input[type="number"], select {
+        input, select {
             width: 100%;
-            padding: 12px;
-            background-color: #2b2b36;
+            padding: 10px;
+            background-color: #1a1a20;
             border: 1px solid var(--border-color);
             color: white;
             border-radius: 6px;
-            font-size: 16px;
+            font-size: 14px;
             box-sizing: border-box;
         }
 
@@ -67,206 +85,246 @@
             border-color: var(--accent-color);
         }
 
-        .tp-section {
-            background-color: #25252e;
+        .output-box {
+            background-color: #1a1a20;
             padding: 15px;
             border-radius: 8px;
-            margin-bottom: 10px;
-            border-left: 4px solid var(--border-color);
+            border: 1px solid var(--accent-color);
         }
 
-        .tp-header {
-            font-weight: bold;
-            margin-bottom: 10px;
+        textarea {
+            width: 100%;
+            height: 240px;
+            background-color: transparent;
+            border: none;
             color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+            resize: none;
+            line-height: 1.5;
         }
 
-        .tp-flex {
-            display: flex;
-            gap: 10px;
-        }
+        textarea:focus { outline: none; }
 
-        .tp-flex > div {
-            flex: 1;
-        }
-
-        .result-box {
-            margin-top: 20px;
-            padding: 20px;
-            background-color: #1a1a20;
-            border-radius: 8px;
-            border: 1px solid var(--border-color);
-        }
-
-        .result-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px 0;
-            border-bottom: 1px solid #333;
-        }
-
-        .result-item:last-child {
-            border-bottom: none;
-        }
-
-        .total-result {
-            font-size: 18px;
+        .copy-btn {
+            width: 100%;
+            padding: 14px;
+            background-color: var(--accent-color);
+            color: #000;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
             font-weight: bold;
-            color: var(--accent-color);
-            text-align: right;
-            padding-top: 15px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            margin-top: 10px;
         }
 
-        .positive { color: var(--accent-color); }
-        .negative { color: var(--danger-color); }
-        
-        .flex-row {
-            display: flex;
-            gap: 15px;
-        }
-        .flex-row > .input-group { flex: 1; }
+        .copy-btn:hover { background-color: #00e075; }
+        .copy-btn:active { transform: scale(0.98); }
 
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>📈 레버리지 & TP 수익 계산기</h1>
+    <h1>📝 트레이딩 시그널 텍스트 생성기</h1>
 
-    <div class="flex-row">
-        <div class="input-group">
-            <label>포지션</label>
-            <select id="positionType">
-                <option value="long">Long (롱/매수)</option>
-                <option value="short">Short (숏/매도)</option>
-            </select>
+    <!-- 기본 정보 -->
+    <div class="section">
+        <div class="section-title">기본 정보</div>
+        <div class="grid-3">
+            <div>
+                <label>코인/종목명</label>
+                <input type="text" id="coin" value="BTC" placeholder="예: BTC">
+            </div>
+            <div>
+                <label>포지션</label>
+                <select id="pos">
+                    <option value="long">Long (매수)</option>
+                    <option value="short">Short (매도)</option>
+                </select>
+            </div>
+            <div>
+                <label>레버리지 (x)</label>
+                <input type="number" id="lev" value="10" min="1">
+            </div>
         </div>
-        <div class="input-group">
-            <label>레버리지 (x)</label>
-            <input type="number" id="leverage" value="2" min="1">
+    </div>
+
+    <!-- 진입가 (EP) -->
+    <div class="section">
+        <div class="section-title">진입가 (EP) - 최대 3분할</div>
+        <div class="grid-2">
+            <div><label>진입가 1</label><input type="number" id="ep1Price" value="57800" step="0.01"></div>
+            <div><label>투자금액 (USDT 등)</label><input type="number" id="ep1Usdt" value="25000"></div>
+        </div>
+        <div class="grid-2">
+            <div><input type="number" id="ep2Price" value="56500" step="0.01" placeholder="진입가 2 (선택)"></div>
+            <div><input type="number" id="ep2Usdt" value="25000" placeholder="투자금액 2 (선택)"></div>
+        </div>
+        <div class="grid-2">
+            <div><input type="number" id="ep3Price" step="0.01" placeholder="진입가 3 (선택)"></div>
+            <div><input type="number" id="ep3Usdt" placeholder="투자금액 3 (선택)"></div>
         </div>
     </div>
 
-    <div class="input-group">
-        <label>진입가 (Entry Price)</label>
-        <input type="number" id="entryPrice" value="60000" min="0" step="0.01">
+    <!-- 익절가 (TP) -->
+    <div class="section">
+        <div class="section-title">익절 타겟 (TP)</div>
+        <div class="grid-2">
+            <div><label>TP 1 가격</label><input type="number" id="tp1Price" value="60200" step="0.01"></div>
+            <div><label>비중 (%)</label><input type="number" id="tp1Pct" value="25"></div>
+        </div>
+        <div class="grid-2">
+            <div><input type="number" id="tp2Price" value="62200" step="0.01" placeholder="TP 2 가격"></div>
+            <div><input type="number" id="tp2Pct" value="25" placeholder="비중 (%)"></div>
+        </div>
+        <div class="grid-2">
+            <div><input type="number" id="tp3Price" value="65000" step="0.01" placeholder="TP 3 가격"></div>
+            <div><input type="number" id="tp3Pct" value="25" placeholder="비중 (%)"></div>
+        </div>
+        <div class="grid-2">
+            <div><input type="number" id="tp4Price" value="70000" step="0.01" placeholder="TP 4 가격"></div>
+            <div><input type="number" id="tp4Pct" value="25" placeholder="비중 (%)"></div>
+        </div>
     </div>
 
-    <hr style="border:0; border-top:1px solid #333; margin:20px 0;">
-
-    <div id="tp-container">
-        <!-- TP 1~4 생성 -->
-        <script>
-            for(let i=1; i<=4; i++) {
-                document.write(`
-                    <div class="tp-section" id="tp${i}-box">
-                        <div class="tp-header">🎯 TP ${i}</div>
-                        <div class="tp-flex">
-                            <div>
-                                <label>타겟 가격</label>
-                                <input type="number" id="tp${i}Price" class="tp-price" placeholder="가격 입력" step="0.01">
-                            </div>
-                            <div>
-                                <label>익절 비중 (%)</label>
-                                <input type="number" id="tp${i}Percent" class="tp-percent" placeholder="예: 25" min="0" max="100">
-                            </div>
-                        </div>
-                    </div>
-                `);
-            }
-        </script>
+    <!-- 손절가 (SL) -->
+    <div class="section">
+        <div class="section-title">손절 (SL)</div>
+        <div class="grid-2">
+            <div><label>SL 가격</label><input type="number" id="slPrice" value="55700" step="0.01"></div>
+            <div><label>비중 (%)</label><input type="number" id="slPct" value="100"></div>
+        </div>
     </div>
 
-    <div class="result-box">
-        <div style="font-weight: bold; margin-bottom: 10px;">📊 계산 결과</div>
-        <div id="result-content">값을 입력하면 결과가 나타납니다.</div>
-        <div class="total-result" id="total-result"></div>
+    <!-- 결과 복사 영역 -->
+    <div class="output-box">
+        <textarea id="outputText" readonly></textarea>
+        <button class="copy-btn" onclick="copyText()">📋 텍스트 복사하기</button>
     </div>
 </div>
 
 <script>
     const inputs = document.querySelectorAll('input, select');
-    
-    // 값이 변경될 때마다 자동 계산
-    inputs.forEach(input => {
-        input.addEventListener('input', calculate);
-    });
+    inputs.forEach(input => input.addEventListener('input', generateText));
 
-    function calculate() {
-        const position = document.getElementById('positionType').value;
-        const leverage = parseFloat(document.getElementById('leverage').value) || 1;
-        const entry = parseFloat(document.getElementById('entryPrice').value);
-        
-        if (!entry || entry <= 0) return;
-
-        let resultHTML = '';
-        let totalContribution = 0;
-        let totalClosedPercent = 0;
-
-        for (let i = 1; i <= 4; i++) {
-            const tpPrice = parseFloat(document.getElementById(`tp${i}Price`).value);
-            const tpPercent = parseFloat(document.getElementById(`tp${i}Percent`).value) || 0;
-
-            const box = document.getElementById(`tp${i}-box`);
-            box.style.borderLeftColor = '#333'; // 초기화
-
-            if (tpPrice && tpPercent > 0) {
-                // 수익률(ROE) 계산 로직
-                let priceChangeRate = 0;
-                if (position === 'long') {
-                    priceChangeRate = (tpPrice - entry) / entry * 100;
-                } else {
-                    priceChangeRate = (entry - tpPrice) / entry * 100;
-                }
-
-                const roe = priceChangeRate * leverage;
-                const contribution = roe * (tpPercent / 100);
-                
-                totalContribution += contribution;
-                totalClosedPercent += tpPercent;
-
-                const colorClass = roe >= 0 ? 'positive' : 'negative';
-                const sign = roe >= 0 ? '+' : '';
-                
-                box.style.borderLeftColor = roe >= 0 ? 'var(--accent-color)' : 'var(--danger-color)';
-
-                resultHTML += `
-                    <div class="result-item">
-                        <span>TP ${i} (${tpPercent}% 익절)</span>
-                        <span>
-                            해당 구간 ROE: <strong class="${colorClass}">${sign}${roe.toFixed(2)}%</strong> 
-                            <span style="font-size:12px; color:#888;">(누적 기여: ${sign}${contribution.toFixed(2)}%)</span>
-                        </span>
-                    </div>
-                `;
-            }
-        }
-
-        const resultContent = document.getElementById('result-content');
-        const totalDiv = document.getElementById('total-result');
-
-        if (resultHTML === '') {
-            resultContent.innerHTML = '<span style="color:#888;">TP 가격과 익절 비중을 입력해주세요.</span>';
-            totalDiv.innerHTML = '';
-            return;
-        }
-
-        if (totalClosedPercent > 100) {
-            resultContent.innerHTML = `<span style="color:var(--danger-color);">⚠️ 익절 비중의 합이 100%를 초과했습니다. (${totalClosedPercent}%)</span>`;
-            totalDiv.innerHTML = '';
-            return;
-        }
-
-        resultContent.innerHTML = resultHTML;
-        
-        const totalSign = totalContribution >= 0 ? '+' : '';
-        totalDiv.innerHTML = `총 누적 확정 수익률: <span class="${totalContribution >= 0 ? 'positive' : 'negative'}">${totalSign}${totalContribution.toFixed(2)}%</span>`;
+    // 숫자 3자리마다 콤마 찍기 로직
+    function formatNum(num) {
+        return Number(num).toLocaleString('en-US', {maximumFractionDigits: 4});
     }
 
-    // 초기 예시값 세팅 (질문자의 예시)
-    document.getElementById('tp1Price').value = 66000;
-    document.getElementById('tp1Percent').value = 20;
-    calculate(); // 초기 계산 실행
+    function generateText() {
+        const coin = (document.getElementById('coin').value || 'BTC').toUpperCase();
+        const posValue = document.getElementById('pos').value;
+        const posText = posValue === 'long' ? 'Long' : 'Short';
+        const lev = parseFloat(document.getElementById('lev').value) || 1;
+
+        let text = `${coin} ${posText} ${lev}x\n\n`;
+
+        // 1. EP(진입가) 처리 및 평균 단가 계산
+        let epList = [];
+        let totalUsdt = 0;
+        let totalCoins = 0;
+
+        for(let i=1; i<=3; i++) {
+            const p = parseFloat(document.getElementById(`ep${i}Price`).value);
+            const u = parseFloat(document.getElementById(`ep${i}Usdt`).value) || 0;
+            if (p > 0) epList.push({price: p, usdt: u});
+        }
+
+        let avgEp = 0;
+        let epString = '';
+
+        if (epList.length > 0) {
+            epString += `EP\n`;
+            let allHaveUsdt = true;
+
+            epList.forEach(ep => {
+                epString += `${formatNum(ep.price)}`;
+                if (ep.usdt > 0) {
+                    epString += ` - ${formatNum(ep.usdt)} USDT\n`;
+                    totalUsdt += ep.usdt;
+                    totalCoins += (ep.usdt / ep.price);
+                } else {
+                    epString += '\n';
+                    allHaveUsdt = false;
+                }
+            });
+
+            // 가중 평균 단가 (진입 금액 기반) 
+            if (allHaveUsdt && totalCoins > 0) {
+                avgEp = totalUsdt / totalCoins;
+            } else {
+                // 금액이 없으면 단순 평균 계산
+                avgEp = epList.reduce((sum, ep) => sum + ep.price, 0) / epList.length;
+            }
+            text += epString + '\n';
+        }
+
+        // 2. TP(익절) 처리
+        let tpString = '';
+        let hasTp = false;
+
+        for(let i=1; i<=4; i++) {
+            const p = parseFloat(document.getElementById(`tp${i}Price`).value);
+            const pct = parseFloat(document.getElementById(`tp${i}Pct`).value);
+
+            if (p > 0) {
+                if (!hasTp) { tpString += `TP\n`; hasTp = true; }
+                
+                let roeStr = '';
+                if (avgEp > 0) {
+                    // ROE 계산식: (종료가 - 평균단가) / 평균단가 * 레버리지 * 100
+                    let roe = (posValue === 'long' ? (p - avgEp)/avgEp : (avgEp - p)/avgEp) * lev * 100;
+                    let sign = roe > 0 ? '+' : '';
+                    roeStr = ` (${sign}${roe.toFixed(2)}%)`;
+                }
+
+                let pctStr = pct > 0 ? ` - ${pct}%` : '';
+                tpString += `${formatNum(p)}${pctStr}${roeStr}\n`;
+            }
+        }
+        if (hasTp) text += tpString + '\n';
+
+        // 3. SL(손절) 처리
+        const slPrice = parseFloat(document.getElementById('slPrice').value);
+        const slPct = parseFloat(document.getElementById('slPct').value) || 100;
+        
+        if (slPrice > 0) {
+            let roeStr = '';
+            if (avgEp > 0) {
+                let roe = (posValue === 'long' ? (slPrice - avgEp)/avgEp : (avgEp - slPrice)/avgEp) * lev * 100;
+                let sign = roe > 0 ? '+' : '';
+                roeStr = ` (${sign}${roe.toFixed(2)}%)`;
+            }
+            text += `SL\n${formatNum(slPrice)} - ${slPct}%${roeStr}\n`;
+        }
+
+        // 결과창 업데이트
+        document.getElementById('outputText').value = text.trim();
+    }
+
+    // 복사하기 기능
+    function copyText() {
+        const textarea = document.getElementById('outputText');
+        textarea.select();
+        textarea.setSelectionRange(0, 99999); /* 모바일 대응 */
+        navigator.clipboard.writeText(textarea.value).then(() => {
+            const btn = document.querySelector('.copy-btn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '✅ 복사 완료!';
+            btn.style.backgroundColor = '#fff';
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.style.backgroundColor = 'var(--accent-color)';
+            }, 1500);
+        });
+    }
+
+    // 처음 렌더링 시 자동 생성 1회 실행
+    generateText();
 </script>
 
 </body>
