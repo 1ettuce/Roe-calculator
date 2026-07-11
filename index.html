@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>트레이딩 시그널/수익 공유 생성기</title>
+    <title>트레이딩 시그널/수익 공유 생성기 (체결 확인용)</title>
     <style>
         :root {
             --bg-color: #121212;
@@ -59,6 +59,8 @@
             text-transform: uppercase;
         }
 
+        /* 체크박스 전용 그리드 추가 */
+        .grid-ep { display: grid; grid-template-columns: 70px 1fr 1fr; gap: 10px; align-items: center; margin-bottom: 10px; }
         .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
         .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 
@@ -69,7 +71,26 @@
             margin-bottom: 4px;
         }
 
-        input, select {
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 14px;
+            color: #fff;
+            cursor: pointer;
+            margin: 0;
+            user-select: none;
+        }
+
+        .checkbox-label input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: var(--accent-color);
+            margin: 0;
+        }
+
+        input[type="text"], input[type="number"], select {
             width: 100%;
             padding: 10px;
             background-color: #1a1a20;
@@ -128,7 +149,7 @@
 <body>
 
 <div class="container">
-    <h1>📝 트레이딩 시그널 생성기 (비중 ROE 적용)</h1>
+    <h1>📝 트레이딩 시그널 생성기 (체결 관리)</h1>
 
     <!-- 기본 정보 -->
     <div class="section">
@@ -152,20 +173,35 @@
         </div>
     </div>
 
-    <!-- 진입가 (EP) -->
+    <!-- 진입가 (EP) - 체크박스 추가됨 -->
     <div class="section">
-        <div class="section-title">진입가 (EP) - 최대 3분할</div>
-        <div class="grid-2">
-            <div><label>진입가 1</label><input type="number" id="ep1Price" value="57800" step="0.01"></div>
-            <div><label>투자금액 (USDT 등)</label><input type="number" id="ep1Usdt" value="25000"></div>
+        <div class="section-title">진입가 (EP) - 체결된 항목만 체크 ☑️</div>
+        
+        <!-- EP 1 -->
+        <div class="grid-ep">
+            <label class="checkbox-label"><input type="checkbox" id="ep1Check" checked> EP 1</label>
+            <div>
+                <label>진입가</label>
+                <input type="number" id="ep1Price" value="57800" step="0.01">
+            </div>
+            <div>
+                <label>투자금액 (USDT)</label>
+                <input type="number" id="ep1Usdt" value="25000">
+            </div>
         </div>
-        <div class="grid-2">
-            <div><input type="number" id="ep2Price" value="56500" step="0.01" placeholder="진입가 2 (선택)"></div>
-            <div><input type="number" id="ep2Usdt" value="25000" placeholder="투자금액 2 (선택)"></div>
+        
+        <!-- EP 2 -->
+        <div class="grid-ep">
+            <label class="checkbox-label"><input type="checkbox" id="ep2Check" checked> EP 2</label>
+            <input type="number" id="ep2Price" value="56500" step="0.01" placeholder="진입가">
+            <input type="number" id="ep2Usdt" value="25000" placeholder="투자금액 (USDT)">
         </div>
-        <div class="grid-2">
-            <div><input type="number" id="ep3Price" step="0.01" placeholder="진입가 3 (선택)"></div>
-            <div><input type="number" id="ep3Usdt" placeholder="투자금액 3 (선택)"></div>
+
+        <!-- EP 3 -->
+        <div class="grid-ep">
+            <label class="checkbox-label"><input type="checkbox" id="ep3Check"> EP 3</label>
+            <input type="number" id="ep3Price" step="0.01" placeholder="진입가">
+            <input type="number" id="ep3Usdt" placeholder="투자금액 (USDT)">
         </div>
     </div>
 
@@ -207,11 +243,21 @@
 </div>
 
 <script>
+    // input 값 변경 및 체크박스 클릭 시 즉시 반영
     const inputs = document.querySelectorAll('input, select');
-    inputs.forEach(input => input.addEventListener('input', generateText));
+    inputs.forEach(input => {
+        input.addEventListener('input', generateText);
+        input.addEventListener('change', generateText);
+    });
 
+    // 가격 표시용 (최대 소수점 4자리)
     function formatNum(num) {
         return Number(num).toLocaleString('en-US', {maximumFractionDigits: 4});
+    }
+    
+    // 금액(USDT) 표시용 (소수점 2자리 제한)
+    function formatMoney(num) {
+        return Number(num).toLocaleString('en-US', {maximumFractionDigits: 2});
     }
 
     function generateText() {
@@ -222,23 +268,28 @@
 
         let text = `${coin} ${posText} ${lev}x\n\n`;
 
-        // 1. EP(진입가) 처리 및 평균 단가(Avg EP) 계산
+        // 1. EP(진입가) 처리 - 체크된 항목만 선별
         let epList = [];
         let totalUsdt = 0;
         let totalCoins = 0;
 
         for(let i=1; i<=3; i++) {
+            const isChecked = document.getElementById(`ep${i}Check`).checked;
             const p = parseFloat(document.getElementById(`ep${i}Price`).value);
             const u = parseFloat(document.getElementById(`ep${i}Usdt`).value) || 0;
-            if (p > 0) epList.push({price: p, usdt: u});
+            
+            // 체크되어 있고 가격이 입력된 경우에만 배열에 추가
+            if (isChecked && p > 0) {
+                epList.push({price: p, usdt: u});
+            }
         }
 
         let avgEp = 0;
         let epString = '';
+        let allHaveUsdt = true;
 
         if (epList.length > 0) {
             epString += `EP\n`;
-            let allHaveUsdt = true;
 
             epList.forEach(ep => {
                 epString += `${formatNum(ep.price)}`;
@@ -252,16 +303,21 @@
                 }
             });
 
-            // 평균 단가 계산 (물타기가 모두 체결되었다고 가정)
+            // 체크된 물량들의 평균 단가 계산
             if (allHaveUsdt && totalCoins > 0) {
                 avgEp = totalUsdt / totalCoins; // 가중 평균
             } else {
                 avgEp = epList.reduce((sum, ep) => sum + ep.price, 0) / epList.length; // 단순 평균
             }
             text += epString + '\n';
+        } else {
+            text += `EP\n진입 대기 중...\n\n`;
         }
 
-        // 2. TP(익절) 처리 - 비중 적용된 ROE 출력
+        // 총 시드(투자금)가 계산 가능한 상태인지 확인
+        const canCalculateProfit = (allHaveUsdt && totalUsdt > 0 && epList.length > 0);
+
+        // 2. TP(익절) 처리
         let tpString = '';
         let hasTp = false;
 
@@ -274,14 +330,18 @@
                 
                 let roeStr = '';
                 if (avgEp > 0) {
-                    // 원본 구간 수익률 계산
                     let rawRoe = (posValue === 'long' ? (p - avgEp)/avgEp : (avgEp - p)/avgEp) * lev * 100;
-                    
-                    // 비중(%)을 곱하여 실제 기여 수익률 계산
                     let weightedRoe = rawRoe * (pct / 100);
-                    
                     let sign = weightedRoe > 0 ? '+' : '';
-                    roeStr = ` (${sign}${weightedRoe.toFixed(2)}%)`;
+                    
+                    let profitStr = '';
+                    if (canCalculateProfit) {
+                        let profitAmount = totalUsdt * (weightedRoe / 100);
+                        let pSign = profitAmount > 0 ? '+' : '';
+                        profitStr = ` / ${pSign}${formatMoney(profitAmount)} USDT`;
+                    }
+
+                    roeStr = ` (${sign}${weightedRoe.toFixed(2)}%${profitStr})`;
                 }
 
                 let pctStr = pct > 0 ? ` - ${pct}%` : '';
@@ -290,7 +350,7 @@
         }
         if (hasTp) text += tpString + '\n';
 
-        // 3. SL(손절) 처리 - 비중 적용 및 평균 단가 기준 계산
+        // 3. SL(손절) 처리
         const slPrice = parseFloat(document.getElementById('slPrice').value);
         const slPct = parseFloat(document.getElementById('slPct').value) || 100;
         
@@ -298,11 +358,17 @@
             let roeStr = '';
             if (avgEp > 0) {
                 let rawRoe = (posValue === 'long' ? (slPrice - avgEp)/avgEp : (avgEp - slPrice)/avgEp) * lev * 100;
-                
                 let weightedRoe = rawRoe * (slPct / 100);
-                
                 let sign = weightedRoe > 0 ? '+' : '';
-                roeStr = ` (${sign}${weightedRoe.toFixed(2)}%)`;
+                
+                let profitStr = '';
+                if (canCalculateProfit) {
+                    let profitAmount = totalUsdt * (weightedRoe / 100);
+                    let pSign = profitAmount > 0 ? '+' : '';
+                    profitStr = ` / ${pSign}${formatMoney(profitAmount)} USDT`;
+                }
+
+                roeStr = ` (${sign}${weightedRoe.toFixed(2)}%${profitStr})`;
             }
             text += `SL\n${formatNum(slPrice)} - ${slPct}%${roeStr}\n`;
         }
@@ -326,6 +392,7 @@
         });
     }
 
+    // 초기 실행
     generateText();
 </script>
 
