@@ -3,16 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>트레이딩 시그널/수익 공유 생성기 (체결 확인용)</title>
+    <title>트레이딩 시그널 & 손익 대시보드</title>
     <style>
         :root {
             --bg-color: #121212;
             --panel-bg: #1e1e24;
             --section-bg: #25252e;
+            --dashboard-bg: #1a1e24;
             --text-color: #e0e0e0;
             --accent-color: #00d26a;
             --danger-color: #f6465d;
             --border-color: #333;
+            --highlight-color: #2b313c;
         }
 
         body {
@@ -59,9 +61,8 @@
             text-transform: uppercase;
         }
 
-        /* 체크박스 전용 그리드 추가 */
         .grid-ep { display: grid; grid-template-columns: 70px 1fr 1fr; gap: 10px; align-items: center; margin-bottom: 10px; }
-        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+        .grid-tp { display: grid; grid-template-columns: 80px 1fr 1fr; gap: 10px; align-items: center; margin-bottom: 10px; }
         .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 
         label {
@@ -74,12 +75,13 @@
         .checkbox-label {
             display: flex;
             align-items: center;
-            gap: 5px;
+            gap: 6px;
             font-size: 14px;
             color: #fff;
             cursor: pointer;
             margin: 0;
             user-select: none;
+            font-weight: bold;
         }
 
         .checkbox-label input[type="checkbox"] {
@@ -89,6 +91,9 @@
             accent-color: var(--accent-color);
             margin: 0;
         }
+
+        /* TP 달성 체크박스 특별 컬러 */
+        .tp-checkbox input[type="checkbox"] { accent-color: #3b82f6; }
 
         input[type="text"], input[type="number"], select {
             width: 100%;
@@ -106,16 +111,50 @@
             border-color: var(--accent-color);
         }
 
+        /* 현황판(대시보드) 스타일 */
+        .dashboard {
+            background-color: var(--dashboard-bg);
+            border: 1px solid #3b82f6;
+        }
+        
+        .dash-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 15px;
+            text-align: center;
+        }
+
+        .dash-item {
+            background-color: rgba(255,255,255,0.03);
+            padding: 15px 10px;
+            border-radius: 8px;
+        }
+
+        .dash-label {
+            font-size: 12px;
+            color: #aaa;
+            margin-bottom: 8px;
+        }
+
+        .dash-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .positive { color: var(--accent-color); }
+        .negative { color: var(--danger-color); }
+
         .output-box {
             background-color: #1a1a20;
             padding: 15px;
             border-radius: 8px;
-            border: 1px solid var(--accent-color);
+            border: 1px solid #444;
         }
 
         textarea {
             width: 100%;
-            height: 250px;
+            height: 220px;
             background-color: transparent;
             border: none;
             color: #fff;
@@ -149,7 +188,7 @@
 <body>
 
 <div class="container">
-    <h1>📝 트레이딩 시그널 생성기 (체결 관리)</h1>
+    <h1>📝 트레이딩 셋업 & 관리 보드</h1>
 
     <!-- 기본 정보 -->
     <div class="section">
@@ -173,94 +212,104 @@
         </div>
     </div>
 
-    <!-- 진입가 (EP) - 체크박스 추가됨 -->
+    <!-- 진입가 (EP) -->
     <div class="section">
-        <div class="section-title">진입가 (EP) - 체결된 항목만 체크 ☑️</div>
-        
-        <!-- EP 1 -->
+        <div class="section-title">진입가 (EP) - 체결 확인 ☑️</div>
         <div class="grid-ep">
             <label class="checkbox-label"><input type="checkbox" id="ep1Check" checked> EP 1</label>
-            <div>
-                <label>진입가</label>
-                <input type="number" id="ep1Price" value="57800" step="0.01">
-            </div>
-            <div>
-                <label>투자금액 (USDT)</label>
-                <input type="number" id="ep1Usdt" value="25000">
-            </div>
+            <div><label>진입가</label><input type="number" id="ep1Price" value="57800" step="0.01"></div>
+            <div><label>투자금액 (USDT)</label><input type="number" id="ep1Usdt" value="25000"></div>
         </div>
-        
-        <!-- EP 2 -->
         <div class="grid-ep">
             <label class="checkbox-label"><input type="checkbox" id="ep2Check" checked> EP 2</label>
             <input type="number" id="ep2Price" value="56500" step="0.01" placeholder="진입가">
-            <input type="number" id="ep2Usdt" value="25000" placeholder="투자금액 (USDT)">
+            <input type="number" id="ep2Usdt" value="25000" placeholder="금액">
         </div>
-
-        <!-- EP 3 -->
         <div class="grid-ep">
             <label class="checkbox-label"><input type="checkbox" id="ep3Check"> EP 3</label>
             <input type="number" id="ep3Price" step="0.01" placeholder="진입가">
-            <input type="number" id="ep3Usdt" placeholder="투자금액 (USDT)">
+            <input type="number" id="ep3Usdt" placeholder="금액">
         </div>
     </div>
 
     <!-- 익절가 (TP) -->
     <div class="section">
-        <div class="section-title">익절 타겟 (TP)</div>
-        <div class="grid-2">
+        <div class="section-title">익절 타겟 (TP) - 도달 시 체크 ☑️</div>
+        <div class="grid-tp">
+            <label class="checkbox-label tp-checkbox"><input type="checkbox" id="tp1Check"> 달성 1</label>
             <div><label>TP 1 가격</label><input type="number" id="tp1Price" value="60200" step="0.01"></div>
             <div><label>비중 (%)</label><input type="number" id="tp1Pct" value="25"></div>
         </div>
-        <div class="grid-2">
-            <div><input type="number" id="tp2Price" value="62200" step="0.01" placeholder="TP 2 가격"></div>
-            <div><input type="number" id="tp2Pct" value="25" placeholder="비중 (%)"></div>
+        <div class="grid-tp">
+            <label class="checkbox-label tp-checkbox"><input type="checkbox" id="tp2Check"> 달성 2</label>
+            <input type="number" id="tp2Price" value="62200" step="0.01">
+            <input type="number" id="tp2Pct" value="25">
         </div>
-        <div class="grid-2">
-            <div><input type="number" id="tp3Price" value="65000" step="0.01" placeholder="TP 3 가격"></div>
-            <div><input type="number" id="tp3Pct" value="25" placeholder="비중 (%)"></div>
+        <div class="grid-tp">
+            <label class="checkbox-label tp-checkbox"><input type="checkbox" id="tp3Check"> 달성 3</label>
+            <input type="number" id="tp3Price" value="65000" step="0.01">
+            <input type="number" id="tp3Pct" value="25">
         </div>
-        <div class="grid-2">
-            <div><input type="number" id="tp4Price" value="70000" step="0.01" placeholder="TP 4 가격"></div>
-            <div><input type="number" id="tp4Pct" value="25" placeholder="비중 (%)"></div>
+        <div class="grid-tp">
+            <label class="checkbox-label tp-checkbox"><input type="checkbox" id="tp4Check"> 달성 4</label>
+            <input type="number" id="tp4Price" value="70000" step="0.01">
+            <input type="number" id="tp4Pct" value="25">
         </div>
     </div>
 
     <!-- 손절가 (SL) -->
     <div class="section">
         <div class="section-title">손절 (SL)</div>
-        <div class="grid-2">
+        <div class="grid-tp">
+            <label class="checkbox-label" style="color:var(--danger-color);"><input type="checkbox" id="slCheck"> 도달</label>
             <div><label>SL 가격</label><input type="number" id="slPrice" value="55700" step="0.01"></div>
             <div><label>비중 (%)</label><input type="number" id="slPct" value="100"></div>
         </div>
     </div>
 
+    <!-- 💰 실시간 대시보드 (손익 탭) -->
+    <div class="section dashboard">
+        <div class="section-title" style="color:#3b82f6;">💰 실시간 손익 현황 (체결 & 달성 기준)</div>
+        <div class="dash-grid">
+            <div class="dash-item">
+                <div class="dash-label">체결된 평균 단가</div>
+                <div class="dash-value" id="dashAvgEp">0.00</div>
+            </div>
+            <div class="dash-item">
+                <div class="dash-label">총 진입 마진 (USDT)</div>
+                <div class="dash-value" id="dashTotalMargin">0.00</div>
+            </div>
+            <div class="dash-item">
+                <div class="dash-label">누적 확정 손익 (USDT)</div>
+                <div class="dash-value" id="dashProfit">0.00</div>
+            </div>
+        </div>
+    </div>
+
     <!-- 결과 복사 영역 -->
     <div class="output-box">
+        <div class="section-title">공유용 텍스트 (손익금 제외)</div>
         <textarea id="outputText" readonly></textarea>
         <button class="copy-btn" onclick="copyText()">📋 텍스트 복사하기</button>
     </div>
 </div>
 
 <script>
-    // input 값 변경 및 체크박스 클릭 시 즉시 반영
     const inputs = document.querySelectorAll('input, select');
     inputs.forEach(input => {
-        input.addEventListener('input', generateText);
-        input.addEventListener('change', generateText);
+        input.addEventListener('input', updateAll);
+        input.addEventListener('change', updateAll);
     });
 
-    // 가격 표시용 (최대 소수점 4자리)
     function formatNum(num) {
         return Number(num).toLocaleString('en-US', {maximumFractionDigits: 4});
     }
     
-    // 금액(USDT) 표시용 (소수점 2자리 제한)
     function formatMoney(num) {
-        return Number(num).toLocaleString('en-US', {maximumFractionDigits: 2});
+        return Number(num).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
     }
 
-    function generateText() {
+    function updateAll() {
         const coin = (document.getElementById('coin').value || 'BTC').toUpperCase();
         const posValue = document.getElementById('pos').value;
         const posText = posValue === 'long' ? 'Long' : 'Short';
@@ -268,7 +317,7 @@
 
         let text = `${coin} ${posText} ${lev}x\n\n`;
 
-        // 1. EP(진입가) 처리 - 체크된 항목만 선별
+        // 1. EP(진입가) 처리 - 체크된 항목 선별
         let epList = [];
         let totalUsdt = 0;
         let totalCoins = 0;
@@ -278,7 +327,6 @@
             const p = parseFloat(document.getElementById(`ep${i}Price`).value);
             const u = parseFloat(document.getElementById(`ep${i}Usdt`).value) || 0;
             
-            // 체크되어 있고 가격이 입력된 경우에만 배열에 추가
             if (isChecked && p > 0) {
                 epList.push({price: p, usdt: u});
             }
@@ -290,7 +338,6 @@
 
         if (epList.length > 0) {
             epString += `EP\n`;
-
             epList.forEach(ep => {
                 epString += `${formatNum(ep.price)}`;
                 if (ep.usdt > 0) {
@@ -303,25 +350,25 @@
                 }
             });
 
-            // 체크된 물량들의 평균 단가 계산
             if (allHaveUsdt && totalCoins > 0) {
-                avgEp = totalUsdt / totalCoins; // 가중 평균
+                avgEp = totalUsdt / totalCoins; 
             } else {
-                avgEp = epList.reduce((sum, ep) => sum + ep.price, 0) / epList.length; // 단순 평균
+                avgEp = epList.reduce((sum, ep) => sum + ep.price, 0) / epList.length; 
             }
             text += epString + '\n';
         } else {
             text += `EP\n진입 대기 중...\n\n`;
         }
 
-        // 총 시드(투자금)가 계산 가능한 상태인지 확인
         const canCalculateProfit = (allHaveUsdt && totalUsdt > 0 && epList.length > 0);
+        let cumulativeRealizedProfit = 0; // 누적 손익(USDT)
 
-        // 2. TP(익절) 처리
+        // 2. TP(익절) 처리 (텍스트에는 USDT 제외 / 대시보드에는 수익 합산)
         let tpString = '';
         let hasTp = false;
 
         for(let i=1; i<=4; i++) {
+            const isAchieved = document.getElementById(`tp${i}Check`).checked;
             const p = parseFloat(document.getElementById(`tp${i}Price`).value);
             const pct = parseFloat(document.getElementById(`tp${i}Pct`).value);
 
@@ -334,14 +381,13 @@
                     let weightedRoe = rawRoe * (pct / 100);
                     let sign = weightedRoe > 0 ? '+' : '';
                     
-                    let profitStr = '';
-                    if (canCalculateProfit) {
-                        let profitAmount = totalUsdt * (weightedRoe / 100);
-                        let pSign = profitAmount > 0 ? '+' : '';
-                        profitStr = ` / ${pSign}${formatMoney(profitAmount)} USDT`;
-                    }
+                    // 텍스트용: 원본 템플릿 유지 (수익금 표시 안함)
+                    roeStr = ` (${sign}${weightedRoe.toFixed(2)}%)`;
 
-                    roeStr = ` (${sign}${weightedRoe.toFixed(2)}%${profitStr})`;
+                    // 대시보드용: 체크박스 달성 시 누적 확정 수익 합산
+                    if (isAchieved && canCalculateProfit) {
+                        cumulativeRealizedProfit += totalUsdt * (weightedRoe / 100);
+                    }
                 }
 
                 let pctStr = pct > 0 ? ` - ${pct}%` : '';
@@ -350,7 +396,8 @@
         }
         if (hasTp) text += tpString + '\n';
 
-        // 3. SL(손절) 처리
+        // 3. SL(손절) 처리 
+        const slAchieved = document.getElementById('slCheck').checked;
         const slPrice = parseFloat(document.getElementById('slPrice').value);
         const slPct = parseFloat(document.getElementById('slPct').value) || 100;
         
@@ -361,19 +408,34 @@
                 let weightedRoe = rawRoe * (slPct / 100);
                 let sign = weightedRoe > 0 ? '+' : '';
                 
-                let profitStr = '';
-                if (canCalculateProfit) {
-                    let profitAmount = totalUsdt * (weightedRoe / 100);
-                    let pSign = profitAmount > 0 ? '+' : '';
-                    profitStr = ` / ${pSign}${formatMoney(profitAmount)} USDT`;
-                }
+                roeStr = ` (${sign}${weightedRoe.toFixed(2)}%)`;
 
-                roeStr = ` (${sign}${weightedRoe.toFixed(2)}%${profitStr})`;
+                // 손절 도달 시 손실금 합산
+                if (slAchieved && canCalculateProfit) {
+                    cumulativeRealizedProfit += totalUsdt * (weightedRoe / 100);
+                }
             }
             text += `SL\n${formatNum(slPrice)} - ${slPct}%${roeStr}\n`;
         }
 
+        // 4. UI 업데이트
         document.getElementById('outputText').value = text.trim();
+        
+        // 대시보드 업데이트
+        document.getElementById('dashAvgEp').innerText = avgEp > 0 ? formatNum(avgEp) : '0.00';
+        document.getElementById('dashTotalMargin').innerText = totalUsdt > 0 ? formatMoney(totalUsdt) : '0.00';
+        
+        const dashProfit = document.getElementById('dashProfit');
+        if (cumulativeRealizedProfit > 0) {
+            dashProfit.innerText = `+${formatMoney(cumulativeRealizedProfit)}`;
+            dashProfit.className = 'dash-value positive';
+        } else if (cumulativeRealizedProfit < 0) {
+            dashProfit.innerText = formatMoney(cumulativeRealizedProfit);
+            dashProfit.className = 'dash-value negative';
+        } else {
+            dashProfit.innerText = '0.00';
+            dashProfit.className = 'dash-value';
+        }
     }
 
     function copyText() {
@@ -392,8 +454,8 @@
         });
     }
 
-    // 초기 실행
-    generateText();
+    // 초기 렌더링
+    updateAll();
 </script>
 
 </body>
