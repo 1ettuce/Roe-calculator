@@ -510,28 +510,77 @@
 
     // ===== 시그널 텍스트 → 자동 입력 =====
     const SECTION_HEADERS = [
-        { key: 'ep', re: /^(?:\d\s*차\s*)?(?:e\.?p\.?|entry(?:\s*(?:price|zone))?|entries|진입\s*(?:가|구간|존)?|매수\s*(?:가|구간))(?![a-z])/i },
-        { key: 'tp', re: /^(?:\d\s*차\s*)?(?:t\.?p\.?|take\s*profits?|targets?|익절\s*(?:가|구간|목표)?|목표\s*가?)(?![a-z])/i },
-        { key: 'sl', re: /^(?:s\s*\/\s*l|s\.?l\.?|stop\s*loss|stop|손절\s*(?:가|라인)?|스탑\s*로스|스탑|로스\s*컷|무효화)(?![a-z])/i },
+        { key: 'ep', re: /^(?:\d\s*차\s*)?(?:(?:long|short|롱|숏)\s*)?(?:e(?:\s*\/\s*|\.)?p\.?|entry(?:\s*(?:price|zone|targets?))?|entries|진입\s*(?:가격|가|구간|존)?|매수\s*(?:가격|가|구간)|타점)(?![a-z])/i },
+        { key: 'tp', re: /^(?:\d\s*차\s*)?(?:t(?:\s*\/\s*|\.)?p\.?s?|take[\s\-]*profits?(?:\s*targets?)?|targets?|익절\s*(?:가격|가|구간|목표)?|목표\s*(?:가격|가)?)(?![a-z])/i },
+        { key: 'sl', re: /^(?:s(?:\s*\/\s*|\.)?l\.?|stop[\s\-]*loss|stop(?:\s*targets?)?|손절\s*(?:가격|가|라인)?|스탑\s*로스|스탑|로스\s*컷|무효화)(?![a-z])/i },
     ];
+    // 한 줄에 여러 섹션이 있을 때 나누는 기준: "진입 2560 / 목표 2615 / 손절 2500"
+    const INLINE_SECTION = '(?:\\d\\s*차\\s*)?(?:e(?:\\s*\\/\\s*|\\.)?p|entry|진입|t(?:\\s*\\/\\s*|\\.)?p\\.?s?|take[\\s\\-]*profit|targets?|목표|익절|s(?:\\s*\\/\\s*|\\.)?l|stop|손절)(?![a-z])[^\\d\\n|\\/,·]*\\d';
+    const INLINE_SPLIT_ANY = new RegExp(`\\s*[|·]\\s*(?=${INLINE_SECTION})`, 'gi');
+    const INLINE_SPLIT_AFTER_NUM = new RegExp(`(\\d%?)(?:\\s*[\\/,]\\s*|\\s+)(?=${INLINE_SECTION})`, 'gi');
+    // 숫자 뒤에 와도 메모로 보지 않는 한글 단어
+    const NOTE_OK_WORD = /^(?:차|번|원|달러|불|비중|분할|물량|및|또는|와|과|부터|까지|에서|사이|구간)$/;
+    // 값 줄에 있으면 '조건 가격' 메모로 보는 단어: "2,480 이탈 시 진입 취소"
+    const NOTE_LEVEL = /이탈|돌파|하회|상회|종가|마감|무효|취소|미체결/;
+    // 포지션으로 오인하기 쉬운 표현
+    const POS_NOISE = /숏\s*스퀴즈|숏\s*커버(?:링)?|[롱숏]\s*청산|롱\s*\/?\s*숏|과매[수도]|매[수도]\s*세|(?:long|short)[\s\-]*term/gi;
     const NON_COIN = new Set(['LONG', 'SHORT', 'EP', 'TP', 'SL', 'USDT', 'USDC', 'BUSD', 'USD', 'KRW', 'PERP',
-        'ENTRY', 'TARGET', 'TARGETS', 'STOP', 'LOSS', 'BUY', 'SELL', 'ROE', 'PNL', 'SPOT', 'DCA', 'BE']);
+        'ENTRY', 'TARGET', 'TARGETS', 'STOP', 'LOSS', 'BUY', 'SELL', 'ROE', 'PNL', 'SPOT', 'DCA', 'BE',
+        'VIP', 'SIGNAL', 'SIGNALS', 'FREE', 'NEW', 'TRADE', 'SCALP', 'SWING', 'UPDATE', 'ALERT', 'TYPE', 'REGULAR',
+        'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'UPBIT', 'BITHUMB', 'CROSS', 'ISOLATED', 'MARKET', 'LIMIT', 'CMP',
+        'FVG', 'OB', 'ATH', 'ATL', 'HTF', 'LTF', 'RSI', 'EMA', 'MA', 'MACD', 'NFA', 'DYOR']);
 
-    // 괄호 메모/수익률 제거: "2,615(체결 시 본절)" → "2,615", "(+41.52%)" → ""
-    function cleanSignalLine(raw) {
+    // 메모/수익률/비율/날짜 제거: "2,615(체결 시 본절)" → "2,615", "(+41.52%)", "(1:2)", "10/07" → ""
+    function stripNotes(raw) {
         return raw
-            .replace(/[(\[]([^()\[\]]*)[)\]]/g, (m, inner) => /[%\p{L}]/u.test(inner) ? ' ' : ` ${inner} `)
-            .replace(/^[^\p{L}\p{N}]+/u, '')
-            .trim();
+            .replace(/\d️?⃣/g, ' ')    // 1️⃣ 키캡 번호
+            .replace(/[(\[（]([^()\[\]（）]*)[)\]）]/g, (m, inner) =>
+                /^\s*\d[\d,]*(?:\.\d+)?(?:\s*[-~–]\s*\d[\d,]*(?:\.\d+)?)?\s*$/.test(inner) ? ` ${inner} ` : ' ')
+            .replace(/\d{4}[.\-\/]\d{1,2}[.\-\/]\d{1,2}|(?:^|\s)\d{1,2}\/\d{1,2}(?=\s|$)/g, ' ')
+            .replace(/(^|[^\d.,])\d{1,2}\s*:\s*\d{1,2}(?![\d.,])/g, '$1 ');
+    }
+
+    function trimLead(line) {
+        return line.replace(/^[^\p{L}\p{N}]+/u, '').trim();
+    }
+
+    function splitInlineSections(line) {
+        return line.replace(INLINE_SPLIT_ANY, '\n').replace(INLINE_SPLIT_AFTER_NUM, '$1\n').split('\n');
+    }
+
+    // "TP 1 2,615", "진입 2차: 2,515" → 순번 제거 ("EP 4 - 3.85"의 4는 가격이라 유지)
+    function stripIndex(rest, count, isHeader) {
+        const m = rest.match(/^\s*[#\-]?\s*(\d)(?![\d.,])\s*(차|번)?/);
+        if (!m) return rest;
+        const d = Number(m[1]);
+        const next = rest.slice(m[0].length).match(/\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/);
+        const nextVal = next ? parseFloat(next[0].replace(/,/g, '')) : 0;
+        return m[2] || nextVal >= d * 10 || (isHeader && d <= count + 1) ? rest.slice(m[0].length) : rest;
+    }
+
+    // 머리글 뒤가 한글 메모로 시작하면 메모 줄: "스탑로스는 TP1 체결 시 본절로 변경"
+    function isNoteRest(rest) {
+        return /^[\s:：\-]*\p{Script=Hangul}/u.test(rest) && !/^[\s:：\-]*[은는이가을를]?\s*[:：]?\s*[\d$]/u.test(rest);
+    }
+
+    // 숫자 뒤 한글 메모 잘라내기: "2,615 체결 시 SL 2,560" → "2,615"
+    function cutAtNote(line) {
+        const re = /\p{Script=Hangul}+/gu;
+        let m;
+        while ((m = re.exec(line))) {
+            if (!NOTE_OK_WORD.test(m[0])) return line.slice(0, m.index);
+        }
+        return line;
     }
 
     // 한 줄에서 가격 / 비중(%) / 금액(USDT) 추출
-    function extractSignalValues(line) {
+    function extractSignalValues(line, section) {
         const entries = [];
         for (const m of line.matchAll(/\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/g)) {
             const before = line[m.index - 1] || '';
             const after = line.slice(m.index + m[0].length);
             if (/[\p{L}.]/u.test(before)) continue; // H4, EMA200 등
+            if (/[x×*]\s*$/i.test(line.slice(0, m.index))) continue; // "2,560 x 2 분할"의 배수
             const unit = (after.match(/^\s*(%|usdt|usdc|busd|usd)(?![a-z])/i) || [])[1];
             if (!unit && /^\p{L}/u.test(after) && !/^(?:원|달러|불)/.test(after)) continue; // 4h, 1차, 10x 등
             const value = parseFloat(m[0].replace(/,/g, ''));
@@ -539,11 +588,14 @@
 
             const last = entries[entries.length - 1];
             if (unit === '%') {
+                // "+2.1%", "-2.34%", "ROE 21%"는 비중이 아니라 수익률
+                const prefix = line.slice(0, m.index);
+                if (/(?:[+−]|(?:^|\s)-)$/.test(prefix) || /(?:roe|pnl)[^\d]*$/i.test(prefix)) continue;
                 if (last && last.pct == null) last.pct = value;
-            } else if (unit && last && last.usdt == null) {
-                last.usdt = value;
+            } else if (unit && section === 'ep' && last && last.usdt == null && !last.priceUnit) {
+                last.usdt = value;    // "57,800 - 30,000 USDT"
             } else {
-                entries.push({ price: value });
+                entries.push(unit ? { price: value, priceUnit: true } : { price: value });
             }
         }
         return entries;
@@ -551,18 +603,19 @@
 
     function normalizeCoin(sym) {
         const s = sym.toUpperCase().replace(/[\s\/\-_]/g, '').replace(/(?:USDT|USDC|BUSD|USD|KRW|PERP)+$/, '');
-        return s.length >= 2 && !NON_COIN.has(s) ? s : '';
+        return s.length >= 2 && !NON_COIN.has(s) && !/^[HMDW]\d{1,3}$/.test(s) ? s : '';
     }
 
-    function detectCoin(text, headerLines) {
+    function detectCoin(rawHeader, text, headerLines) {
         const candidates = [];
-        // 1) 괄호 안 티커: (ETH), [BTCUSDT]
-        for (const m of text.matchAll(/[(\[]\s*([A-Z][A-Z0-9]{1,14}(?:\s*\/\s*[A-Z]{3,4})?)\s*[)\]]/g)) candidates.push(m[1]);
+        // 1) 머리글 괄호 안 티커: (ETH), [BTCUSDT]
+        for (const m of rawHeader.matchAll(/[(\[]\s*([A-Z][A-Z0-9]{1,14}(?:\s*\/\s*[A-Z]{3,4})?)\s*[)\]]/g)) candidates.push(m[1]);
         // 2) $ETH, #ETH, ETH/USDT, ETHUSDT
         for (const m of text.matchAll(/[#$]([A-Za-z][A-Za-z0-9]{1,14})/g)) candidates.push(m[1]);
         for (const m of text.matchAll(/\b([A-Z][A-Z0-9]{1,14})\s*[\/\-]?\s*(?:USDT|USDC|BUSD|USD|KRW)\b/g)) candidates.push(m[1]);
-        // 3) EP/TP/SL 이전 머리글의 대문자 단어: "BTC Long 10x"
-        headerLines.forEach(line => {
+        // 3) 머리글의 대문자 단어, 포지션이 적힌 줄 우선: "BTC Long 10x"
+        const posLines = headerLines.filter(line => /\b(?:long|short)\b|롱|숏/i.test(line));
+        [...posLines, ...headerLines].forEach(line => {
             for (const m of line.matchAll(/\b([A-Z][A-Z0-9]{1,9})\b/g)) candidates.push(m[1]);
         });
         for (const c of candidates) {
@@ -572,33 +625,56 @@
         return '';
     }
 
-    function detectPosition(text) {
-        const m = text.match(/\b(long|short)\b|롱|숏|매수|매도/i);
-        if (!m) return '';
-        return /^(long|롱|매수)$/i.test(m[0]) ? 'long' : 'short';
+    function detectPosition(lines) {
+        const cleaned = lines.map(line => line.replace(POS_NOISE, ' '));
+        const toPos = word => /^(long|롱|매수)$/i.test(word) ? 'long' : 'short';
+        // 1) 줄 맨 앞의 포지션: "Long(메인)", "ETH 롱", "BTC Short 20x"
+        for (const line of cleaned) {
+            const m = line.match(/^(?:[A-Za-z0-9#$\/\-.]+\s+)?(long|short|롱|숏)(?![a-z])/i);
+            if (m) return toPos(m[1]);
+        }
+        // 2) 아무 곳의 long/short/롱/숏, 3) 매수/매도
+        for (const re of [/\b(long|short)\b|(롱|숏)/i, /(매수|매도)/]) {
+            for (const line of cleaned) {
+                const m = line.match(re);
+                if (m) return toPos(m[1] || m[2]);
+            }
+        }
+        return '';
     }
 
     function detectLeverage(text) {
-        const m = text.match(/(?:^|[^\w.,])(\d{1,3})\s*(?:x|×|배)(?![a-z])/im)
-            || text.match(/(?:^|[^a-z])[x×]\s*(\d{1,3})(?![\d.,])/im)
-            || text.match(/레버(?:리지)?\s*[:：]?\s*(\d{1,3})/);
+        const t = text
+            .replace(/[(\[（][^()\[\]（）]*\p{Script=Hangul}[^()\[\]（）]*[)\]）]/gu, ' ')   // 한글 메모 괄호
+            .replace(/(?:손익비|물량|수량|거래량|수익|비중)\s*\d{1,3}\s*배/g, ' ');
+        const m = t.match(/(?:레버리지|레버|leverage)\s*[:：]?\s*(?:cross|isolated|교차|격리)?\s*[:：(]?\s*[x×]?\s*(\d{1,3})(?![\d.,])/i)
+            || t.match(/(?:^|[^\w.,])(\d{1,3})\s*(?:x|×|배)(?![a-z])(?!\s*(?:물량|수량|비중|분할))/im)
+            || t.match(/(?:^|[^a-z])[x×]\s*(\d{1,3})(?![\d.,a-z])(?!\s*(?:물량|수량|비중|분할))/im);
         const lev = m ? parseInt(m[1], 10) : 0;
         return lev >= 1 && lev <= 250 ? lev : 0;
     }
 
     function parseSignal(text) {
-        const result = { coin: '', pos: '', posInferred: false, lev: 0, ep: [], tp: [], sl: [], truncated: false };
-        const headerLines = [];
+        const result = { coin: '', pos: '', posInferred: false, posConflict: '', lev: 0, ep: [], tp: [], sl: [], truncated: false };
+        const headerLines = [], rawHeaderLines = [], seenLines = [];
         let section = null;      // 현재 값을 받는 섹션
         let lastSection = null;  // 마지막으로 등장한 섹션 머리글
+        let closed = null;       // 빈 줄로 닫힌 섹션
 
-        for (const raw of text.replace(/\r/g, '').split('\n')) {
-            let line = cleanSignalLine(raw);
+        // 두 줄에 걸친 괄호 메모 제거: "2,615(체결 시\n본절로 변경)"
+        const src = text.replace(/\r/g, '').replace(/[(\[（][^()\[\]（）\n]*\n[^()\[\]（）\n]*[)\]）]/g, ' ');
+        const pieces = [];
+        src.split('\n').forEach(raw => {
+            splitInlineSections(stripNotes(raw)).forEach(part => pieces.push({ raw, line: trimLead(part) }));
+        });
+
+        for (const piece of pieces) {
+            let line = piece.line;
             const hasValues = result.ep.length || result.tp.length || result.sl.length;
 
             // 빈 줄/구분선은 값이 들어간 섹션을 닫음
             if (!line) {
-                if (section && result[section].length) section = null;
+                if (section && result[section].length) { closed = section; section = null; }
                 continue;
             }
             // 두 번째 시나리오(예: "Short(서브)")가 시작되면 첫 번째 시나리오만 사용
@@ -606,39 +682,55 @@
                 result.truncated = true;
                 break;
             }
+            seenLines.push(line);
 
             const header = SECTION_HEADERS.find(h => h.re.test(line));
             if (header) {
+                let rest = line.replace(header.re, '');
+                if (header.key !== 'sl') rest = stripIndex(rest, result[header.key].length, true);
+                if (isNoteRest(rest)) continue;   // "스탑로스는 TP1 체결 시 본절로 변경" 같은 메모 줄
                 if (header.key !== lastSection && result[header.key].length) {
                     result.truncated = true;
                     break;
                 }
                 section = lastSection = header.key;
-                line = line.replace(header.re, '');
-                // "TP 1 2,615" → 순번(1) 제거
-                if (section !== 'sl') line = line.replace(/^\s*[#\-]?\s*\d(?![\d.,])/, '');
-            } else if (!section) {
-                if (!lastSection) headerLines.push(line);
+                closed = null;
+                line = rest.replace(/^[\s:：\-]*[은는이가을를](?=\s*[:：]?\s*[\d$])/, '');
+            } else if (section) {
+                if (NOTE_LEVEL.test(line)) continue;   // "2,480 이탈 시 진입 취소" 같은 조건 메모
+                if (section !== 'sl') line = stripIndex(line, result[section].length, false);
+            } else if (closed && closed === lastSection && /^[\d,.\s\-~–]+$/.test(line)) {
+                section = closed;   // "EP\n2,560\n\n2,515"처럼 빈 줄로 띄운 값
+            } else {
+                if (!lastSection) {
+                    headerLines.push(line);
+                    rawHeaderLines.push(piece.raw);
+                }
                 continue;
             }
 
-            line = line
-                .replace(/^\s*\d{1,2}[.)]\s+(?=.*\d)/, '')               // "1. 2,615" 목록 번호
-                .replace(/\b(?:ep|tp)\s*#?\d(?![\d.,])/gi, ' ');         // 같은 줄의 "TP 2" 등
-            result[section].push(...extractSignalValues(line));
+            line = cutAtNote(line)
+                .replace(/^\s*#?\d{1,2}(?:[.)]\s+|:\s*)(?=\d)/, '')   // "1. 2,615", "1: 2,615" 목록 번호
+                .replace(/(^|\s)\d{1,2}\)\s+(?=\d)/g, '$1')            // "1) 2615 2) 2660"
+                .replace(/\b(?:ep|tp)\s*#?\d(?![\d.,])/gi, ' ');      // 같은 줄의 "TP 2" 등
+            result[section].push(...extractSignalValues(line, section));
         }
 
-        result.coin = detectCoin(text, headerLines);
-        result.pos = detectPosition(text);
+        result.coin = detectCoin(rawHeaderLines.join('\n'), text, headerLines);
+        result.pos = detectPosition(seenLines);
         result.lev = detectLeverage(text);
 
-        // 포지션 키워드가 없으면 가격 방향으로 추정
-        if (!result.pos && result.ep.length && (result.tp.length || result.sl.length)) {
+        // 가격 방향(TP/SL이 EP 위인지 아래인지)이 분명하면 그쪽을 우선
+        if (result.ep.length) {
             const ep = result.ep[0].price;
-            result.pos = result.tp.length
-                ? (result.tp[0].price > ep ? 'long' : 'short')
-                : (result.sl[0].price < ep ? 'long' : 'short');
-            result.posInferred = true;
+            const byTp = result.tp.length ? (result.tp[0].price > ep ? 'long' : 'short') : '';
+            const bySl = result.sl.length ? (result.sl[0].price < ep ? 'long' : 'short') : '';
+            const byPrice = byTp && bySl && byTp !== bySl ? '' : (byTp || bySl);
+            if (byPrice && byPrice !== result.pos) {
+                result.posConflict = result.pos;
+                result.pos = byPrice;
+                result.posInferred = true;
+            }
         }
         return result;
     }
@@ -709,9 +801,18 @@
 
         const coin = (document.getElementById('coin').value || '').toUpperCase();
         const posText = document.getElementById('pos').value === 'long' ? 'Long' : 'Short';
-        let msg = `✅ ${coin} ${posText}${sig.posInferred ? '(가격으로 추정)' : ''} · EP ${Math.min(sig.ep.length, 3)}개 · TP ${tps.length}개 · SL ${sl ? formatNum(sl.price) : '없음'} 입력 완료`;
+        let msg = `✅ ${coin} ${posText}${sig.posInferred && !sig.posConflict ? '(가격으로 추정)' : ''} · EP ${Math.min(sig.ep.length, 3)}개 · TP ${tps.length}개 · SL ${sl ? formatNum(sl.price) : '없음'} 입력 완료`;
         const warnings = [];
+        if (sig.posConflict) {
+            const written = sig.posConflict === 'long' ? 'Long' : 'Short';
+            warnings.push(`텍스트에는 ${written}로 보이지만 TP/SL 가격 기준으로 ${posText}로 입력했어요.`);
+        }
         if (!sig.coin) warnings.push('종목명을 찾지 못해 기존 값을 유지했어요.');
+        for (let i = 1; i <= Math.min(sig.ep.length, 3); i++) {
+            if (!(parseFloat(document.getElementById(`ep${i}Usdt`).value) > 0)) {
+                warnings.push(`EP ${i} 투자금액(USDT)이 비어 있어 손익이 계산되지 않아요.`);
+            }
+        }
         if (sig.ep.length > 3) warnings.push(`EP가 ${sig.ep.length}개라 앞의 3개만 입력했어요.`);
         if (sig.tp.length > 4) warnings.push(`TP가 ${sig.tp.length}개라 앞의 4개만 입력했어요.`);
         if (sig.truncated) warnings.push('시나리오가 여러 개라 첫 번째 시나리오만 입력했어요.');
@@ -727,8 +828,19 @@
         document.getElementById('signalInput').focus();
     }
 
-    // 붙여넣기 하면 바로 자동 입력
-    document.getElementById('signalInput').addEventListener('paste', () => setTimeout(applySignalFromInput, 0));
+    // 붙여넣기 하면 바로 자동 입력 (기존 텍스트에 이어 붙지 않도록 붙여넣은 시그널로 교체)
+    document.getElementById('signalInput').addEventListener('paste', e => {
+        if (!e.clipboardData) {
+            setTimeout(applySignalFromInput, 0);
+            return;
+        }
+        const pasted = e.clipboardData.getData('text/plain');
+        const sig = parseSignal(pasted);
+        if (!sig.ep.length && !sig.tp.length && !sig.sl.length) return;   // 시그널이 아니면 일반 붙여넣기
+        e.preventDefault();
+        e.target.value = pasted;
+        applySignalFromInput();
+    });
 
     // 초기 렌더링
     updateAll();
