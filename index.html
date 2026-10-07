@@ -518,7 +518,7 @@
     const INLINE_SECTION = '(?:\\d\\s*차\\s*)?(?:e(?:\\s*\\/\\s*|\\.)?p|entry|진입|t(?:\\s*\\/\\s*|\\.)?p\\.?s?|take[\\s\\-]*profits?|targets?|목표|익절|타[겟깃]|엔트리|s(?:\\s*\\/\\s*|\\.)?l|stop|손절)(?![a-z])(?!\\s*(?:시|후)(?![가-힣]))[^\\d\\n|\\/,·→]*\\d(?![\\d.,]*\\s*%)';
     const INLINE_SPLIT_POS = new RegExp(`^([^\\d\\n]*?(?:long|short|롱|숏)(?![a-z]))\\s*[\\/|,·]?\\s+(?=${INLINE_SECTION})`, 'i');
     const INLINE_SPLIT_ANY = new RegExp(`\\s*[|·]\\s*(?=${INLINE_SECTION})`, 'gi');
-    const INLINE_SPLIT_AFTER_NUM = new RegExp(`(\\d(?:\\s*(?:%|usdt|usdc|usd)(?![a-z]))?)(?:\\s*[\\/,]\\s*|\\s+)(?=${INLINE_SECTION})`, 'gi');
+    const INLINE_SPLIT_AFTER_NUM = new RegExp(`(\\d(?:\\s*(?:%|usdt|usdc|usd)(?![a-z]))?)(?:\\s*[\\/,→]\\s*|\\s+)(?=${INLINE_SECTION})`, 'gi');
     // 손절 이동 메모: "스탑로스는 TP1 체결 시 본절로 변경", "1차 익절 후 손절 2,580 으로 상향"
     const NOTE_MOVE = /본절|(?:으로|로)\s*(?:상향|하향|이동|변경|조정)|^[\s:：\-]*(?:상향|하향)|(?:상향|하향)\s*(?:조정|이동|예정|합니다|$)|손절\s*(?:가\s*)?(?:상향|하향|이동|변경)|이동(?!\s*평균)|변경(?!\s*없)/;
     // 주문 취소 메모: "진입 후 4시간 내 미체결 시 취소", "2,480 이탈 시 진입 취소"
@@ -920,7 +920,20 @@
             applySignalFromInput();
             return;
         }
-        setTimeout(applySignalFromInput, 0);   // 머리글 뒤에 본문을 붙이는 경우 등은 그대로 이어 붙임
+        // 머리글 뒤에 본문을 붙이는 경우 등은 이어 붙임 (줄바꿈 없이 끝난 줄 뒤에는 줄을 바꿔서)
+        if (e.clipboardData && box.value && !/\n\s*$/.test(box.value) && !/^\s*\n/.test(pasted)
+            && box.selectionStart === box.value.length && box.selectionEnd === box.value.length) {
+            e.preventDefault();
+            if (!document.execCommand || !document.execCommand('insertText', false, '\n' + pasted)) box.value += '\n' + pasted;
+            applySignalFromInput();
+            return;
+        }
+        setTimeout(applySignalFromInput, 0);
+    });
+
+    // Ctrl+Z / Ctrl+Y로 텍스트를 되돌리면 입력값도 다시 맞춤
+    document.getElementById('signalInput').addEventListener('input', e => {
+        if (/^history(?:Undo|Redo)$/.test(e.inputType) && e.target.value.trim()) setTimeout(applySignalFromInput, 0);
     });
 
     // 초기 렌더링
