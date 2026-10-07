@@ -183,12 +183,66 @@
         .copy-btn:hover { background-color: #00e075; }
         .copy-btn:active { transform: scale(0.98); }
 
+        /* 시그널 자동 입력 */
+        .signal-input {
+            height: 150px;
+            padding: 10px;
+            background-color: #1a1a20;
+            border: 1px dashed #555;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-family: inherit;
+            font-size: 13px;
+            resize: vertical;
+        }
+
+        .signal-input:focus { border: 1px solid var(--accent-color); }
+
+        .signal-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .signal-btn {
+            flex: 1;
+            padding: 11px;
+            background-color: #3b82f6;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .signal-btn:hover { background-color: #4b8ff7; }
+        .signal-btn:active { transform: scale(0.98); }
+        .signal-btn.secondary { flex: 0 0 90px; background-color: #3a3a46; color: #ddd; }
+
+        .signal-status { font-size: 13px; line-height: 1.5; margin-top: 10px; }
+        .signal-status:empty { display: none; }
+        .signal-status.ok { color: var(--accent-color); }
+        .signal-status.warn { color: #f0b90b; }
+        .signal-status.error { color: var(--danger-color); }
+
     </style>
 </head>
 <body>
 
 <div class="container">
     <h1>📝 트레이딩 셋업 & 관리 보드</h1>
+
+    <!-- 시그널 자동 입력 -->
+    <div class="section">
+        <div class="section-title">⚡ 시그널 붙여넣기 (자동 입력)</div>
+        <textarea id="signalInput" class="signal-input" placeholder="트레이더 시그널 텍스트를 붙여넣으면 종목 / 포지션 / EP / TP / SL이 자동으로 입력됩니다.&#10;&#10;예)&#10;트레이더 매매 관점 (ETH)&#10;Long&#10;EP&#10;2,560 - 2,515&#10;TP 1 2,615&#10;TP 2 2,660&#10;S/L&#10;2,500"></textarea>
+        <div class="signal-actions">
+            <button type="button" class="signal-btn" onclick="applySignalFromInput()">⚡ 자동 입력</button>
+            <button type="button" class="signal-btn secondary" onclick="clearSignalInput()">지우기</button>
+        </div>
+        <div class="signal-status" id="signalStatus"></div>
+    </div>
 
     <!-- 기본 정보 -->
     <div class="section">
@@ -453,6 +507,228 @@
             }, 1500);
         });
     }
+
+    // ===== 시그널 텍스트 → 자동 입력 =====
+    const SECTION_HEADERS = [
+        { key: 'ep', re: /^(?:\d\s*차\s*)?(?:e\.?p\.?|entry(?:\s*(?:price|zone))?|entries|진입\s*(?:가|구간|존)?|매수\s*(?:가|구간))(?![a-z])/i },
+        { key: 'tp', re: /^(?:\d\s*차\s*)?(?:t\.?p\.?|take\s*profits?|targets?|익절\s*(?:가|구간|목표)?|목표\s*가?)(?![a-z])/i },
+        { key: 'sl', re: /^(?:s\s*\/\s*l|s\.?l\.?|stop\s*loss|stop|손절\s*(?:가|라인)?|스탑\s*로스|스탑|로스\s*컷|무효화)(?![a-z])/i },
+    ];
+    const NON_COIN = new Set(['LONG', 'SHORT', 'EP', 'TP', 'SL', 'USDT', 'USDC', 'BUSD', 'USD', 'KRW', 'PERP',
+        'ENTRY', 'TARGET', 'TARGETS', 'STOP', 'LOSS', 'BUY', 'SELL', 'ROE', 'PNL', 'SPOT', 'DCA', 'BE']);
+
+    // 괄호 메모/수익률 제거: "2,615(체결 시 본절)" → "2,615", "(+41.52%)" → ""
+    function cleanSignalLine(raw) {
+        return raw
+            .replace(/[(\[]([^()\[\]]*)[)\]]/g, (m, inner) => /[%\p{L}]/u.test(inner) ? ' ' : ` ${inner} `)
+            .replace(/^[^\p{L}\p{N}]+/u, '')
+            .trim();
+    }
+
+    // 한 줄에서 가격 / 비중(%) / 금액(USDT) 추출
+    function extractSignalValues(line) {
+        const entries = [];
+        for (const m of line.matchAll(/\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/g)) {
+            const before = line[m.index - 1] || '';
+            const after = line.slice(m.index + m[0].length);
+            if (/[\p{L}.]/u.test(before)) continue; // H4, EMA200 등
+            const unit = (after.match(/^\s*(%|usdt|usdc|busd|usd)(?![a-z])/i) || [])[1];
+            if (!unit && /^\p{L}/u.test(after) && !/^(?:원|달러|불)/.test(after)) continue; // 4h, 1차, 10x 등
+            const value = parseFloat(m[0].replace(/,/g, ''));
+            if (!(value > 0)) continue;
+
+            const last = entries[entries.length - 1];
+            if (unit === '%') {
+                if (last && last.pct == null) last.pct = value;
+            } else if (unit && last && last.usdt == null) {
+                last.usdt = value;
+            } else {
+                entries.push({ price: value });
+            }
+        }
+        return entries;
+    }
+
+    function normalizeCoin(sym) {
+        const s = sym.toUpperCase().replace(/[\s\/\-_]/g, '').replace(/(?:USDT|USDC|BUSD|USD|KRW|PERP)+$/, '');
+        return s.length >= 2 && !NON_COIN.has(s) ? s : '';
+    }
+
+    function detectCoin(text, headerLines) {
+        const candidates = [];
+        // 1) 괄호 안 티커: (ETH), [BTCUSDT]
+        for (const m of text.matchAll(/[(\[]\s*([A-Z][A-Z0-9]{1,14}(?:\s*\/\s*[A-Z]{3,4})?)\s*[)\]]/g)) candidates.push(m[1]);
+        // 2) $ETH, #ETH, ETH/USDT, ETHUSDT
+        for (const m of text.matchAll(/[#$]([A-Za-z][A-Za-z0-9]{1,14})/g)) candidates.push(m[1]);
+        for (const m of text.matchAll(/\b([A-Z][A-Z0-9]{1,14})\s*[\/\-]?\s*(?:USDT|USDC|BUSD|USD|KRW)\b/g)) candidates.push(m[1]);
+        // 3) EP/TP/SL 이전 머리글의 대문자 단어: "BTC Long 10x"
+        headerLines.forEach(line => {
+            for (const m of line.matchAll(/\b([A-Z][A-Z0-9]{1,9})\b/g)) candidates.push(m[1]);
+        });
+        for (const c of candidates) {
+            const coin = normalizeCoin(c);
+            if (coin) return coin;
+        }
+        return '';
+    }
+
+    function detectPosition(text) {
+        const m = text.match(/\b(long|short)\b|롱|숏|매수|매도/i);
+        if (!m) return '';
+        return /^(long|롱|매수)$/i.test(m[0]) ? 'long' : 'short';
+    }
+
+    function detectLeverage(text) {
+        const m = text.match(/(?:^|[^\w.,])(\d{1,3})\s*(?:x|×|배)(?![a-z])/im)
+            || text.match(/(?:^|[^a-z])[x×]\s*(\d{1,3})(?![\d.,])/im)
+            || text.match(/레버(?:리지)?\s*[:：]?\s*(\d{1,3})/);
+        const lev = m ? parseInt(m[1], 10) : 0;
+        return lev >= 1 && lev <= 250 ? lev : 0;
+    }
+
+    function parseSignal(text) {
+        const result = { coin: '', pos: '', posInferred: false, lev: 0, ep: [], tp: [], sl: [], truncated: false };
+        const headerLines = [];
+        let section = null;      // 현재 값을 받는 섹션
+        let lastSection = null;  // 마지막으로 등장한 섹션 머리글
+
+        for (const raw of text.replace(/\r/g, '').split('\n')) {
+            let line = cleanSignalLine(raw);
+            const hasValues = result.ep.length || result.tp.length || result.sl.length;
+
+            // 빈 줄/구분선은 값이 들어간 섹션을 닫음
+            if (!line) {
+                if (section && result[section].length) section = null;
+                continue;
+            }
+            // 두 번째 시나리오(예: "Short(서브)")가 시작되면 첫 번째 시나리오만 사용
+            if (hasValues && /^(?:long|short|롱|숏)(?![a-z])/i.test(line)) {
+                result.truncated = true;
+                break;
+            }
+
+            const header = SECTION_HEADERS.find(h => h.re.test(line));
+            if (header) {
+                if (header.key !== lastSection && result[header.key].length) {
+                    result.truncated = true;
+                    break;
+                }
+                section = lastSection = header.key;
+                line = line.replace(header.re, '');
+                // "TP 1 2,615" → 순번(1) 제거
+                if (section !== 'sl') line = line.replace(/^\s*[#\-]?\s*\d(?![\d.,])/, '');
+            } else if (!section) {
+                if (!lastSection) headerLines.push(line);
+                continue;
+            }
+
+            line = line
+                .replace(/^\s*\d{1,2}[.)]\s+(?=.*\d)/, '')               // "1. 2,615" 목록 번호
+                .replace(/\b(?:ep|tp)\s*#?\d(?![\d.,])/gi, ' ');         // 같은 줄의 "TP 2" 등
+            result[section].push(...extractSignalValues(line));
+        }
+
+        result.coin = detectCoin(text, headerLines);
+        result.pos = detectPosition(text);
+        result.lev = detectLeverage(text);
+
+        // 포지션 키워드가 없으면 가격 방향으로 추정
+        if (!result.pos && result.ep.length && (result.tp.length || result.sl.length)) {
+            const ep = result.ep[0].price;
+            result.pos = result.tp.length
+                ? (result.tp[0].price > ep ? 'long' : 'short')
+                : (result.sl[0].price < ep ? 'long' : 'short');
+            result.posInferred = true;
+        }
+        return result;
+    }
+
+    // 비중이 없는 TP는 남은 비중(100% - 지정된 비중)을 균등 분배
+    function fillTpWeights(tps) {
+        const missing = tps.filter(tp => tp.pct == null);
+        if (!missing.length) return tps.map(tp => tp.pct);
+        const given = tps.reduce((sum, tp) => sum + (tp.pct || 0), 0);
+        const remain = Math.max(0, 100 - given);
+        const base = Math.floor(remain / missing.length);
+        let extra = remain - base * missing.length;
+        return tps.map(tp => {
+            if (tp.pct != null) return tp.pct;
+            const pct = base + (extra > 0 ? 1 : 0);
+            if (extra > 0) extra--;
+            return pct;
+        });
+    }
+
+    function applySignalFromInput() {
+        const status = document.getElementById('signalStatus');
+        const text = document.getElementById('signalInput').value;
+        if (!text.trim()) {
+            status.className = 'signal-status error';
+            status.innerText = '⚠️ 시그널 텍스트를 붙여넣어 주세요.';
+            return;
+        }
+
+        const sig = parseSignal(text);
+        if (!sig.ep.length && !sig.tp.length && !sig.sl.length) {
+            status.className = 'signal-status error';
+            status.innerText = '⚠️ EP / TP / SL 값을 찾지 못했어요. 텍스트 형식을 확인해 주세요.';
+            return;
+        }
+
+        const set = (id, value) => { document.getElementById(id).value = value; };
+        const check = (id, checked) => { document.getElementById(id).checked = checked; };
+
+        if (sig.coin) set('coin', sig.coin);
+        if (sig.pos) set('pos', sig.pos);
+        if (sig.lev) set('lev', sig.lev);
+
+        // EP: 가격 입력 + 체결 체크 (투자금액은 시그널에 있을 때만 덮어씀)
+        for (let i = 1; i <= 3; i++) {
+            const ep = sig.ep[i - 1];
+            set(`ep${i}Price`, ep ? ep.price : '');
+            check(`ep${i}Check`, !!ep);
+            if (ep && ep.usdt) set(`ep${i}Usdt`, ep.usdt);
+        }
+
+        // TP: 가격 + 비중, 달성 체크 해제
+        const tps = sig.tp.slice(0, 4);
+        const weights = fillTpWeights(tps);
+        for (let i = 1; i <= 4; i++) {
+            set(`tp${i}Price`, tps[i - 1] ? tps[i - 1].price : '');
+            set(`tp${i}Pct`, tps[i - 1] ? weights[i - 1] : '');
+            check(`tp${i}Check`, false);
+        }
+
+        // SL: 첫 번째 값 사용
+        const sl = sig.sl[0];
+        set('slPrice', sl ? sl.price : '');
+        set('slPct', sl && sl.pct ? sl.pct : 100);
+        check('slCheck', false);
+
+        updateAll();
+
+        const coin = (document.getElementById('coin').value || '').toUpperCase();
+        const posText = document.getElementById('pos').value === 'long' ? 'Long' : 'Short';
+        let msg = `✅ ${coin} ${posText}${sig.posInferred ? '(가격으로 추정)' : ''} · EP ${Math.min(sig.ep.length, 3)}개 · TP ${tps.length}개 · SL ${sl ? formatNum(sl.price) : '없음'} 입력 완료`;
+        const warnings = [];
+        if (!sig.coin) warnings.push('종목명을 찾지 못해 기존 값을 유지했어요.');
+        if (sig.ep.length > 3) warnings.push(`EP가 ${sig.ep.length}개라 앞의 3개만 입력했어요.`);
+        if (sig.tp.length > 4) warnings.push(`TP가 ${sig.tp.length}개라 앞의 4개만 입력했어요.`);
+        if (sig.truncated) warnings.push('시나리오가 여러 개라 첫 번째 시나리오만 입력했어요.');
+        if (warnings.length) msg += '\n⚠️ ' + warnings.join('\n⚠️ ');
+
+        status.className = `signal-status ${warnings.length ? 'warn' : 'ok'}`;
+        status.innerText = msg;
+    }
+
+    function clearSignalInput() {
+        document.getElementById('signalInput').value = '';
+        document.getElementById('signalStatus').innerText = '';
+        document.getElementById('signalInput').focus();
+    }
+
+    // 붙여넣기 하면 바로 자동 입력
+    document.getElementById('signalInput').addEventListener('paste', () => setTimeout(applySignalFromInput, 0));
 
     // 초기 렌더링
     updateAll();
